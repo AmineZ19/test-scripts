@@ -352,6 +352,8 @@ function expedierEtMettreAJourNoest() {
     }
 }
 
+// ... (Previous code for appendNumberedNote and expedierEtMettreAJourNoest remains unchanged)
+
 // ✅ Function: Updates tracking statuses for existing NS orders
 function mettreAJourTousStatutsNoest() {
   // Validate API credentials
@@ -388,7 +390,8 @@ function mettreAJourTousStatutsNoest() {
     const reference = donneesNoest[i][0]; // Column A (reference)
     const stopDesk = donneesNoest[i][13]; // Column N (stop desk)
     if (reference && stopDesk !== undefined) {
-      noestStopDeskMap[reference.toString().trim()] = stopDesk.toString().toLowerCase() === "oui" ? true : false;
+      const stopDeskValue = stopDesk.toString().toLowerCase();
+      noestStopDeskMap[reference.toString().trim()] = stopDeskValue === "oui" || stopDeskValue === "yes" || stopDeskValue === "true";
     }
   }
 
@@ -458,9 +461,14 @@ function mettreAJourTousStatutsNoest() {
           // Get stop desk status from Noest Sheet using reference
           const reference = resultatTrack[tracking].OrderInfo.reference || "";
           const isStopDesk = noestStopDeskMap[reference] === true;
+          if (!noestStopDeskMap.hasOwnProperty(reference)) {
+            Logger.log(`Avertissement: Référence ${reference} non trouvée dans noestStopDeskMap pour tracking ${tracking}`);
+          }
 
-          // Include content in note for all events
-          const statusNote = `${latestEvent} (Client ${clientMatch ? "✓" : "✗"})${content ? ` (${content})` : ""}`;
+          // Include content in note only for Tentative de livraison
+          const statusNote = latestEvent === "Tentative de livraison" 
+            ? `${latestEvent} (Client ${clientMatch ? "✓" : "✗"})${content ? ` (${content})` : ""}`
+            : `${latestEvent} (Client ${clientMatch ? "✓" : "✗"})`;
 
           // Map API status to sheet status (Column O) with content-based logic for Tentative de livraison
           const statusMapping = {
@@ -496,19 +504,21 @@ function mettreAJourTousStatutsNoest() {
             "En livraison": "En Livraison",
             "Tentative de livraison": isStopDesk ? (
               content === "Client contacté" ? "Contacté" :
-              content === "Client ne répond pas" ? "Sans Reponse" :
+              content === "Client ne répond pas" ? "SANS REPONSE" :
               content.toLowerCase().includes("injoign") ? "Injoignable" :
-              content.includes("Reporté") ? "Reporté" :
+              content.includes("Reporté") ? "REPORTER" :
               content.includes("Changer le Prix") ? "Prix Modifié" :
               content === "aujourd'hui" ? "Programmé" : "Autre"
             ) : (
-              content.toLowerCase().includes("contacté") ? "Contacté By Livreur" :
-              content === "Client ne répond pas" ? "Sans Reponse" :
-              content.toLowerCase().includes("injoign") ? "Injoignable" :
-              content.includes("Reporté") ? "Reporté" :
+              content === "Client contacté" ? "Contacté Livreur" :
+              content === "Client ne répond pas" ? "SANS REPONSE" :
+              content.toLowerCase().includes("Injoig") ? "Injoignable" :
+              content.includes("Reporté") ? "REPORTER" :
               content.includes("Changer le Prix") ? "Prix Modifié" :
               content === "aujourd'hui" ? "Programmé" : "Autre"
             )
+            // Optional: Add content-based mapping for Colis Ramassé
+            // "Colis Ramassé": content.includes("Scanné") ? "Scanné" : "En dispatche"
           };
 
           const declencheurValue = statusMapping[latestEvent] || latestEvent;
