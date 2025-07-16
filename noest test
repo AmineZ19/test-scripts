@@ -1,195 +1,193 @@
 // ✅ noest.gs - Noest API Integration for Google Sheets
-  // Manages order creation and tracking updates for Noest ("NS") in "Zr Sheet" and "Noest Sheet"
-  // Set "TOKEN_NOEST" and "GUID_NOEST" in File > Project Properties > Script Properties
+// Manages order creation and tracking updates for Noest ("NS") in "Zr Sheet" and "Noest Sheet"
+// Set "TOKEN_NOEST" and "GUID_NOEST" in File > Project Properties > Script Properties
 
-  // ✅ Global Variables
-  const tokenNoest = PropertiesService.getScriptProperties().getProperty("TOKEN_NOEST"); // Noest API token
-  const guidNoest = PropertiesService.getScriptProperties().getProperty("GUID_NOEST"); // Noest API user GUID
-  const feuilleNomZr = "Zr Sheet"; // Main sheet for tracking data
-  const feuilleNomNoest = "Noest Sheet"; // Sheet for Noest order details
-  const feuilleNomLogs = "Noest API Logs"; // New sheet for full API response logs
+// ✅ Global Variables
+const tokenNoest = PropertiesService.getScriptProperties().getProperty("TOKEN_NOEST"); // Noest API token
+const guidNoest = PropertiesService.getScriptProperties().getProperty("GUID_NOEST"); // Noest API user GUID
+const feuilleNomZr = "Zr Sheet"; // Main sheet for tracking data
+const feuilleNomNoest = "Noest Sheet"; // Sheet for Noest order details
 
-  // ✅ Function: Appends numbered notes to a cell with incrementing counters
-  function appendNumberedNote(cell, text) {
-    // Validate input cell
-    if (!cell || typeof cell.getNote !== 'function') {
-      Logger.log(`Erreur dans appendNumberedNote: Cellule invalide`);
-      return;
-    }
-
-    const existingNote = cell.getNote() || "";
-    const cleanText = text.trim();
-    const lines = existingNote.split("\n").filter(line => line.trim());
-    const noteCounts = {};
-    const cleanedLines = [];
-
-    // Parse existing notes to count occurrences
-    for (let line of lines) {
-      const match = line.match(/^(\d+)\.\s+(.+?)(?:\s+\((\d+)\))?$/);
-      if (match) {
-        const [, num, noteText, count] = match;
-        const key = noteText.trim();
-        noteCounts[key] = noteCounts[key] || { count: 0, number: num };
-        if (count) {
-          noteCounts[key].count = Math.max(noteCounts[key].count, parseInt(count));
-        }
-        cleanedLines.push({ text: noteText.trim(), number: num, count: parseInt(count) || 0 });
-      }
-    }
-
-    // Check if the note exists
-    const existingNoteKey = cleanText;
-    if (noteCounts[existingNoteKey]) {
-      // Increment count for existing note
-      noteCounts[existingNoteKey].count++;
-      const existingNumber = noteCounts[existingNoteKey].number;
-
-      // Update or replace the note with new count
-      const updatedLine = `${existingNumber}. ${cleanText} (${noteCounts[existingNoteKey].count})`;
-      const existingIndex = lines.findIndex(line => line.match(/^(\d+)\.\s+(.+?)(?:\s+\(\d+\))?$/)[2]?.trim() === cleanText);
-      if (existingIndex !== -1) {
-        lines[existingIndex] = updatedLine;
-      } else {
-        lines.push(updatedLine);
-      }
-    } else {
-      // New note: assign next number, count = 1
-      const nextNumber = lines.length ? Math.max(...lines.map(line => parseInt(line.match(/^(\d+)/)[1]))) + 1 : 1;
-      noteCounts[cleanText] = { count: 1, number: nextNumber };
-      lines.push(`${nextNumber}. ${cleanText} (1)`);
-    }
-
-    // Update cell with sorted numbered notes
-    cell.setNote(lines.sort((a, b) => parseInt(a.match(/^(\d+)/)[1]) - parseInt(b.match(/^(\d+)/)[1])).join("\n"));
+// ✅ Function: Appends numbered notes to a cell with incrementing counters
+function appendNumberedNote(cell, text) {
+  // Validate input cell
+  if (!cell || typeof cell.getNote !== 'function') {
+    Logger.log(`Erreur dans appendNumberedNote: Cellule invalide`);
+    return;
   }
 
-  // ✅ Function: Creates new Noest orders and updates tracking statuses
-  function expedierEtMettreAJourNoest() {
-    // Validate API credentials
-    if (!tokenNoest || !guidNoest) {
-      Logger.log(`Erreur: api_token ou user_guid manquant`);
-      return;
+  const existingNote = cell.getNote() || "";
+  const cleanText = text.trim();
+  const lines = existingNote.split("\n").filter(line => line.trim());
+  const noteCounts = {};
+  const cleanedLines = [];
+
+  // Parse existing notes to count occurrences
+  for (let line of lines) {
+    const match = line.match(/^(\d+)\.\s+(.+?)(?:\s+\((\d+)\))?$/);
+    if (match) {
+      const [, num, noteText, count] = match;
+      const key = noteText.trim();
+      noteCounts[key] = noteCounts[key] || { count: 0, number: num };
+      if (count) {
+        noteCounts[key].count = Math.max(noteCounts[key].count, parseInt(count));
+      }
+      cleanedLines.push({ text: noteText.trim(), number: num, count: parseInt(count) || 0 });
     }
+  }
 
-    // Load sheets
-    const feuilleZr = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(feuilleNomZr);
-    const feuilleNoest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(feuilleNomNoest);
-    if (!feuilleZr || !feuilleNoest) {
-      Logger.log(`Erreur: Feuille "${feuilleNomZr}" ou "${feuilleNomNoest}" introuvable`);
-      return;
+  // Check if the note exists
+  const existingNoteKey = cleanText;
+  if (noteCounts[existingNoteKey]) {
+    // Increment count for existing note
+    noteCounts[existingNoteKey].count++;
+    const existingNumber = noteCounts[existingNoteKey].number;
+
+    // Update or replace the note with new count
+    const updatedLine = `${existingNumber}. ${cleanText} (${noteCounts[existingNoteKey].count})`;
+    const existingIndex = lines.findIndex(line => line.match(/^(\d+)\.\s+(.+?)(?:\s+\(\d+\))?$/)[2]?.trim() === cleanText);
+    if (existingIndex !== -1) {
+      lines[existingIndex] = updatedLine;
+    } else {
+      lines.push(updatedLine);
     }
+  } else {
+    // New note: assign next number, count = 1
+    const nextNumber = lines.length ? Math.max(...lines.map(line => parseInt(line.match(/^(\d+)/)[1]))) + 1 : 1;
+    noteCounts[cleanText] = { count: 1, number: nextNumber };
+    lines.push(`${nextNumber}. ${cleanText} (1)`);
+  }
 
-    // Get data from both sheets
-    const donneesZr = feuilleZr.getDataRange().getValues();
-    const donneesNoest = feuilleNoest.getDataRange().getValues();
-    if (donneesZr.length < 2 || donneesNoest.length < 2) {
-      Logger.log(`Erreur: Une des feuilles a trop peu de lignes`);
-      return;
-    }
+  // Update cell with sorted numbered notes
+  cell.setNote(lines.sort((a, b) => parseInt(a.match(/^(\d+)/)[1]) - parseInt(b.match(/^(\d+)/)[1])).join("\n"));
+}
 
-    // API endpoints for order creation and tracking
-    const urlAddOrder = "https://app.noest-dz.com/api/public/create/order";
-    const urlTrackings = "https://app.noest-dz.com/api/public/get/trackings/info";
-    const ordersAEnvoyer = [];
-    const lignesAEnvoyer = [];
+// ✅ Function: Creates new Noest orders and updates tracking statuses
+function expedierEtMettreAJourNoest() {
+  // Validate API credentials
+  if (!tokenNoest || !guidNoest) {
+    Logger.log(`Erreur: api_token ou user_guid manquant`);
+    return;
+  }
 
-    // Process rows for new orders (Column O = "Export Noest")
-    try {
-      for (let i = 1; i < donneesZr.length && i < donneesNoest.length; i++) {
-        const ligneZr = donneesZr[i];
-        const ligneNoest = donneesNoest[i];
-        const declencheur = ligneZr[14]; // Column O
-        const societe = ligneZr[12]; // Column M
-        const trackingExistant = ligneZr[21]; // Column V
+  // Load sheets
+  const feuilleZr = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(feuilleNomZr);
+  const feuilleNoest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(feuilleNomNoest);
+  if (!feuilleZr || !feuilleNoest) {
+    Logger.log(`Erreur: Feuille "${feuilleNomZr}" ou "${feuilleNomNoest}" introuvable`);
+    return;
+  }
 
-        if (declencheur === "Export Noest") {
-          // Validate company (NS, ZR, or ZN)
-          if (societe !== "NS" && societe !== "ZR" && societe !== "ZN") {
+  // Get data from both sheets
+  const donneesZr = feuilleZr.getDataRange().getValues();
+  const donneesNoest = feuilleNoest.getDataRange().getValues();
+  if (donneesZr.length < 2 || donneesNoest.length < 2) {
+    Logger.log(`Erreur: Une des feuilles a trop peu de lignes`);
+    return;
+  }
+
+  // API endpoints for order creation and tracking
+  const urlAddOrder = "https://app.noest-dz.com/api/public/create/order";
+  const urlTrackings = "https://app.noest-dz.com/api/public/get/trackings/info";
+  const ordersAEnvoyer = [];
+  const lignesAEnvoyer = [];
+
+  // Process rows for new orders (Column O = "Export Noest")
+  try {
+    for (let i = 1; i < donneesZr.length && i < donneesNoest.length; i++) {
+      const ligneZr = donneesZr[i];
+      const ligneNoest = donneesNoest[i];
+      const declencheur = ligneZr[14]; // Column O
+      const societe = ligneZr[12]; // Column M
+      const trackingExistant = ligneZr[21]; // Column V
+
+      if (declencheur === "Export Noest") {
+        // Validate company (NS, ZR, or ZN)
+        if (societe !== "NS" && societe !== "ZR" && societe !== "ZN") {
+          const cellQ = feuilleZr.getRange(i + 1, 17); // Column Q
+          cellQ.setValue("Veuillez sélectionner la société.");
+          appendNumberedNote(cellQ, "Erreur: Société invalide");
+          continue;
+        }
+
+        // Create new NS order if no tracking exists
+        if (societe === "NS" && (!trackingExistant || trackingExistant === "")) {
+          const stopDesk = (ligneNoest[13] && ligneNoest[13].toString().toLowerCase() === "oui") ? 1 : 0;
+          const typeId = (ligneNoest[9] && ligneNoest[9].toString().toLowerCase().includes("echange")) ? 2 :
+                         (ligneNoest[9] && ligneNoest[9].toString().toLowerCase().includes("pick up")) ? 3 : 1;
+          const client = ligneNoest[1]; // Column B
+          let phone = ligneNoest[2] ? ligneNoest[2].toString().trim() : ""; // Column C
+          const phone2 = ligneNoest[3] ? ligneNoest[3].toString().trim() : ""; // Column D
+          const adresse = ligneNoest[4] ? ligneNoest[4].toString().trim() : ""; // Column E
+          const wilayaId = ligneNoest[7]; // Column H
+          const commune = ligneNoest[5]; // Column F
+          const montant = ligneNoest[6]; // Column G
+          const produit = ligneNoest[8] ? ligneNoest[8].toString().trim() : ""; // Column I
+          const reference = ligneNoest[0] ? ligneNoest[0].toString().trim() : ""; // Column A
+          const remarque = ((ligneNoest[9] || "") + " " + (ligneNoest[11] || "")).trim(); // Columns J + L
+          const stationCode = stopDesk === 1 && ligneNoest[15] ? ligneNoest[15].toString().trim() : ""; // Column P
+
+          // Normalize phone number (add leading 0 for 9-digit numbers)
+          if (phone && /^\d{9}$/.test(phone) && !phone.startsWith("0")) {
+            phone = "0" + phone;
+          }
+
+          // Validate order data
+          let errorMessage = null;
+          if (!client || client.toString().trim() === "") {
+            errorMessage = "Check Client noun ✗";
+          } else if (!phone || phone === "") {
+            errorMessage = "Check Phone1 ✗";
+          } else if (!/^0\d{9}$/.test(phone)) {
+            errorMessage = "Check Phone1 Format ✗";
+          } else if (!wilayaId || wilayaId.toString().trim() === "") {
+            errorMessage = "Check Code Wilaya ✗";
+          } else if (!Number.isInteger(Number(wilayaId)) || Number(wilayaId) < 1 || Number(wilayaId) > 58) {
+            errorMessage = "Check Code Wilaya ✗";
+          } else if (!commune || commune.toString().trim() === "") {
+            errorMessage = "Check Cummune ✗";
+          } else if (!montant || isNaN(Number(montant))) {
+            errorMessage = "Check Price ✗";
+          } else if (!produit || produit === "") {
+            errorMessage = "Check Product ✗";
+          } else if (stopDesk === 1 && (!stationCode || stationCode === "")) {
+            errorMessage = "Check Code Station ✗";
+          } else if (!adresse || adresse === "") {
+            errorMessage = "Check Adresse ✗";
+          }
+
+          if (errorMessage) {
             const cellQ = feuilleZr.getRange(i + 1, 17); // Column Q
-            cellQ.setValue("Veuillez sélectionner la société.");
-            appendNumberedNote(cellQ, "Erreur: Société invalide");
+            cellQ.setValue(errorMessage);
+            appendNumberedNote(cellQ, errorMessage);
+            Logger.log(`Erreur: ${errorMessage} à la ligne ${i + 1}`);
             continue;
           }
 
-          // Create new NS order if no tracking exists
-          if (societe === "NS" && (!trackingExistant || trackingExistant === "")) {
-            const stopDesk = (ligneNoest[13] && ligneNoest[13].toString().toLowerCase() === "oui") ? 1 : 0;
-            const typeId = (ligneNoest[9] && ligneNoest[9].toString().toLowerCase().includes("echange")) ? 2 :
-                           (ligneNoest[9] && ligneNoest[9].toString().toLowerCase().includes("pick up")) ? 3 : 1;
-            const client = ligneNoest[1]; // Column B
-            let phone = ligneNoest[2] ? ligneNoest[2].toString().trim() : ""; // Column C
-            const phone2 = ligneNoest[3] ? ligneNoest[3].toString().trim() : ""; // Column D
-            const adresse = ligneNoest[4] ? ligneNoest[4].toString().trim() : ""; // Column E
-            const wilayaId = ligneNoest[7]; // Column H
-            const commune = ligneNoest[5]; // Column F
-            const montant = ligneNoest[6]; // Column G
-            const produit = ligneNoest[8] ? ligneNoest[8].toString().trim() : ""; // Column I
-            const reference = ligneNoest[0] ? ligneNoest[0].toString().trim() : ""; // Column A
-            const remarque = ((ligneNoest[9] || "") + " " + (ligneNoest[11] || "")).trim(); // Columns J + L
-            const stationCode = stopDesk === 1 && ligneNoest[15] ? ligneNoest[15].toString().trim() : ""; // Column P
+          // Build order object for API
+          ordersAEnvoyer.push({
+            api_token: tokenNoest,
+            user_guid: guidNoest,
+            reference: reference,
+            client: client,
+            phone: phone,
+            phone_2: phone2,
+            adresse: adresse,
+            wilaya_id: Number(wilayaId),
+            commune: commune,
+            montant: Number(montant),
+            remarque: remarque,
+            produit: produit,
+            type_id: typeId,
+            poids: 1,
+            stop_desk: stopDesk,
+            station_code: stationCode,
+            stock: 0, // Set to 0 to bypass disabled storage module
+            quantite: "1",
+            can_open: 0
+          });
 
-            // Normalize phone number (add leading 0 for 9-digit numbers)
-            if (phone && /^\d{9}$/.test(phone) && !phone.startsWith("0")) {
-              phone = "0" + phone;
-            }
-
-            // Validate order data
-            let errorMessage = null;
-            if (!client || client.toString().trim() === "") {
-              errorMessage = "Check Client noun ✗";
-            } else if (!phone || phone === "") {
-              errorMessage = "Check Phone1 ✗";
-            } else if (!/^0\d{9}$/.test(phone)) {
-              errorMessage = "Check Phone1 Format ✗";
-            } else if (!wilayaId || wilayaId.toString().trim() === "") {
-              errorMessage = "Check Code Wilaya ✗";
-            } else if (!Number.isInteger(Number(wilayaId)) || Number(wilayaId) < 1 || Number(wilayaId) > 58) {
-              errorMessage = "Check Code Wilaya ✗";
-            } else if (!commune || commune.toString().trim() === "") {
-              errorMessage = "Check Cummune ✗";
-            } else if (!montant || isNaN(Number(montant))) {
-              errorMessage = "Check Price ✗";
-            } else if (!produit || produit === "") {
-              errorMessage = "Check Product ✗";
-            } else if (stopDesk === 1 && (!stationCode || stationCode === "")) {
-              errorMessage = "Check Code Station ✗";
-            } else if (!adresse || adresse === "") {
-              errorMessage = "Check Adresse ✗";
-            }
-
-            if (errorMessage) {
-              const cellQ = feuilleZr.getRange(i + 1, 17); // Column Q
-              cellQ.setValue(errorMessage);
-              appendNumberedNote(cellQ, errorMessage);
-              Logger.log(`Erreur: ${errorMessage} à la ligne ${i + 1}`);
-              continue;
-            }
-
-            // Build order object for API
-            ordersAEnvoyer.push({
-              api_token: tokenNoest,
-              user_guid: guidNoest,
-              reference: reference,
-              client: client,
-              phone: phone,
-              phone_2: phone2,
-              adresse: adresse,
-              wilaya_id: Number(wilayaId),
-              commune: commune,
-              montant: Number(montant),
-              remarque: remarque,
-              produit: produit,
-              type_id: typeId,
-              poids: 1,
-              stop_desk: stopDesk,
-              station_code: stationCode,
-              stock: 0, // Set to 0 to bypass disabled storage module
-              quantite: "1",
-              can_open: 0
-            });
-
-            lignesAEnvoyer.push(i + 1);
-          }
+          lignesAEnvoyer.push(i + 1);
         }
       }
 
@@ -338,9 +336,10 @@
           cellQ.setValue(errorMessage);
           appendNumberedNote(cellQ, errorMessage);
           Logger.log(`Erreur: ${errorMessage} pour ligne ${ligneSheet}`);
-        }
-      }
-    } catch (e) {
+          }
+          }
+          }
+        } catch (e) {
       // Handle general errors for all orders
       const errorMessage = `Erreur générale dans expedierEtMettreAJourNoest: ${e.message}`;
       for (let j = 0; j < lignesAEnvoyer.length; j++) {
@@ -351,186 +350,182 @@
       }
       Logger.log(errorMessage);
     }
+}
+
+// ✅ Function: Updates tracking statuses for existing NS orders
+function mettreAJourTousStatutsNoest() {
+  // Validate API credentials
+  if (!tokenNoest || !guidNoest) {
+    Logger.log(`Erreur: api_token ou user_guid manquant dans les propriétés du script`);
+    return;
   }
 
-  // ✅ Function: Updates tracking statuses for existing NS orders and logs full API response
-  function mettreAJourTousStatutsNoest() {
-    // Validate API credentials
-    if (!tokenNoest || !guidNoest) {
-      Logger.log(`Erreur: api_token ou user_guid manquant dans les propriétés du script`);
-      return;
+  // Load Zr Sheet
+  const feuilleZr = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(feuilleNomZr);
+  
+  // Load Noest Sheet to check Column N (stop desk)
+  const feuilleNoest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(feuilleNomNoest);
+  
+  // Validate sheets
+  if (!feuilleZr || !feuilleNoest) {
+    Logger.log(`Erreur: Feuille "${feuilleNomZr}" ou "${feuilleNomNoest}" introuvable`);
+    return;
+  }
+
+  // Get data from Zr Sheet and Noest Sheet
+  const donneesZr = feuilleZr.getDataRange().getValues();
+  const donneesNoest = feuilleNoest.getDataRange().getValues();
+  
+  // Validate sheet data
+  if (donneesZr.length < 2) {
+    Logger.log(`Erreur: Feuille Zr a trop peu de lignes`);
+    return;
+  }
+
+  // Create map of reference to stop desk value (Column N) from Noest Sheet
+  const noestStopDeskMap = {};
+  for (let i = 1; i < donneesNoest.length; i++) {
+    const reference = donneesNoest[i][0]; // Column A (reference)
+    const stopDesk = donneesNoest[i][13]; // Column N (stop desk)
+    if (reference && stopDesk !== undefined) {
+      noestStopDeskMap[reference.toString().trim()] = stopDesk.toString().toLowerCase() === "oui" ? true : false;
     }
+  }
 
-    // Load Zr Sheet
-    const feuilleZr = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(feuilleNomZr);
-    if (!feuilleZr) {
-      Logger.log(`Erreur: Feuille "${feuilleNomZr}" introuvable`);
-      return;
+  // Collect NS tracking numbers (Column V, societe = "NS")
+  const trackings = [];
+  for (let i = 1; i < donneesZr.length; i++) {
+    const tracking = donneesZr[i][21]; // Column V
+    const societe = donneesZr[i][12]; // Column M
+    if (tracking && tracking.toString().trim() !== "" && societe === "NS") {
+      trackings.push(tracking.toString().trim());
     }
+  }
 
-    // Create or load Noest API Logs sheet
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    let feuilleLogs = spreadsheet.getSheetByName(feuilleNomLogs);
-    if (!feuilleLogs) {
-      feuilleLogs = spreadsheet.insertSheet(feuilleNomLogs);
-      feuilleLogs.getRange("A1:C1").setValues([["Timestamp", "Tracking Numbers", "API Response"]]);
-      feuilleLogs.getRange("A1:C1").setFontWeight("bold");
-    }
+  // Exit if no valid NS trackings
+  if (trackings.length === 0) {
+    Logger.log("Aucun tracking valide NS à mettre à jour.");
+    return;
+  }
 
-    // Get data from Zr Sheet
-    const donneesZr = feuilleZr.getDataRange().getValues();
-    if (donneesZr.length < 2) {
-      Logger.log(`Erreur: Feuille Zr a trop peu de lignes`);
-      return;
-    }
+  // Prepare API request for tracking
+  const optionsTrack = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({
+      api_token: tokenNoest,
+      user_guid: guidNoest,
+      trackings: trackings
+    }),
+    muteHttpExceptions: true
+  };
 
-    // API endpoint for tracking
-    const urlTrackings = "https://app.noest-dz.com/api/public/get/trackings/info";
-    const trackings = [];
+  // Fetch and process tracking statuses
+  try {
+    const reponseTrack = UrlFetchApp.fetch("https://app.noest-dz.com/api/public/get/trackings/info", optionsTrack);
+    const statusCode = reponseTrack.getResponseCode();
+    const responseText = reponseTrack.getContentText();
 
-    // Collect NS tracking numbers (Column V, societe = "NS")
-    for (let i = 1; i < donneesZr.length; i++) {
-      const tracking = donneesZr[i][21]; // Column V
-      const societe = donneesZr[i][12]; // Column M
-      if (tracking && tracking.toString().trim() !== "" && societe === "NS") {
-        trackings.push(tracking.toString().trim());
+    if (statusCode >= 200 && statusCode < 300) {
+      let resultatTrack;
+      try {
+        resultatTrack = JSON.parse(responseText);
+      } catch (parseError) {
+        throw new Error(`Réponse API trackings non-JSON: ${responseText}`);
       }
-    }
 
-    // Exit if no valid NS trackings
-    if (trackings.length === 0) {
-      Logger.log("Aucun tracking valide NS à mettre à jour.");
-      return;
-    }
+      // Define error message overrides
+      const errorMessageOverrides = {
+        "Erreur: Aucune activité pour tracking": "Aucune Activité"
+      };
 
-    // Prepare API request for tracking
-    const optionsTrack = {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify({
-        api_token: tokenNoest,
-        user_guid: guidNoest,
-        trackings: trackings
-      }),
-      muteHttpExceptions: true
-    };
-
-    // Fetch and process tracking statuses
-    try {
-      const reponseTrack = UrlFetchApp.fetch(urlTrackings, optionsTrack);
-      const statusCode = reponseTrack.getResponseCode();
-      const responseText = reponseTrack.getContentText();
-
-      if (statusCode >= 200 && statusCode < 300) {
-        let resultatTrack;
-        try {
-          resultatTrack = JSON.parse(responseText);
-          // Log full API response to Logger and Noest API Logs sheet
-          Logger.log(`Réponse API complète: ${JSON.stringify(resultatTrack)}`);
-          const timestamp = Utilities.formatDate(new Date(), "GMT+1", "yyyy-MM-dd HH:mm:ss 'CET'");
-          const trackingList = trackings.join(",");
-          const lastRow = feuilleLogs.getLastRow();
-          feuilleLogs.getRange(lastRow + 1, 1, 1, 3).setValues([[timestamp, trackingList, JSON.stringify(resultatTrack)]]);
-        } catch (parseError) {
-          throw new Error(`Réponse API trackings non-JSON: ${responseText}`);
+      // Update sheet for each NS tracking
+      for (let i = 1; i < donneesZr.length; i++) {
+        const tracking = donneesZr[i][21]; // Column V
+        const societe = donneesZr[i][12]; // Column M
+        if (!tracking || tracking.toString().trim() === "" || societe !== "NS") {
+          continue;
         }
 
-        // Define error message overrides
-        const errorMessageOverrides = {
-          "Erreur: Aucune activité pour tracking": "Aucun Activité"
-        };
+        const cellQ = feuilleZr.getRange(i + 1, 17); // Column Q
+        if (resultatTrack[tracking] && resultatTrack[tracking].activity && resultatTrack[tracking].activity.length > 0) {
+          const latestEvent = resultatTrack[tracking].activity[resultatTrack[tracking].activity.length - 1].event;
+          const content = resultatTrack[tracking].activity[resultatTrack[tracking].activity.length - 1].content || "";
+          const clientNomAPI = resultatTrack[tracking].OrderInfo.client || "";
+          const clientNomFeuille = donneesZr[i][1]; // Zr Sheet Column B
+          const clientMatch = clientNomAPI.trim() === clientNomFeuille.toString().trim();
 
-        // Update sheet for each NS tracking
-        for (let i = 1; i < donneesZr.length; i++) {
-          const tracking = donneesZr[i][21]; // Column V
-          const societe = donneesZr[i][12]; // Column M
-          if (!tracking || tracking.toString().trim() === "" || societe !== "NS") continue;
+          // Get stop desk status from Noest Sheet using reference
+          const reference = resultatTrack[tracking].OrderInfo.reference || "";
+          const isStopDesk = noestStopDeskMap[reference] === true;
 
-          const cellQ = feuilleZr.getRange(i + 1, 17); // Column Q
-          if (resultatTrack[tracking] && resultatTrack[tracking].activity && resultatTrack[tracking].activity.length > 0) {
-            const latestEvent = resultatTrack[tracking].activity[resultatTrack[tracking].activity.length - 1].event;
-            const content = resultatTrack[tracking].activity[resultatTrack[tracking].activity.length - 1].content || ""; // Get content for clarity
-            const clientNomAPI = resultatTrack[tracking].OrderInfo.client || "";
-            const clientNomFeuille = donneesZr[i][1]; // Zr Sheet Column B
-            const clientMatch = clientNomAPI.trim() === clientNomFeuille.toString().trim();
-            // Include content in note only for "Tentative de livraison" and "Informations modifiées"
-            const statusNote = (latestEvent === "Tentative de livraison" || latestEvent === "Informations modifiées") ? 
-                              `${latestEvent} (Client ${clientMatch ? "✓" : "✗"})${content ? ` (${content})` : ""}` : 
-                              `${latestEvent} (Client ${clientMatch ? "✓" : "✗"})`;
+          // Include content in note for all events
+          const statusNote = `${latestEvent} (Client ${clientMatch ? "✓" : "✗"})${content ? ` (${content})` : ""}`;
 
-            // Map API status to sheet status (Column O) with content-based logic
-            const statusMapping = {
-              "Validé": "En dispatche",
-              "Uploadé sur le système": "En Preparation",
-              "Colis Ramassé": "En dispatche",
-              "Reception validé": "En Preparation",
-              "Enlevé par le livreur": "Au Bureau",
-              "Nouvelle tentative demandée par le vendeur": "Autre",
-              "Retour demandé par le partenaire": "Suspendu",
-              "Retour En transit": "Suspendu",
-              "Retour transmis au partenaire": "ANNULER",
-              "Pick-UP transmis au partenaire": "Pick-UP",
-              "Transmission du retour au partenaire annulée": "Autre",
-              "Retour reçu par le partenaire": "ANNULER",
-              "Retour validé par le partenaire": "ANNULER",
-              "Retour remis en livraison": "Autre",
-              "Retour transmis vers entrepôt": "Autre",
-              "Pick-Up collecté": "Pick-UP",
-              "Pick-Up validé": "Pick-UP",
-              "Pick-Up reçu par le partenaire": "Pick-UP",
-              "Suspendu": "Suspendu",
-              "Livré": "LIVRE",
-              "Montant transmis au partenaire": "LIVRE",
-              "Versement annulé": "Autre",
-              "Montant reçu par le partenaire": "LIVRE",
-              "Échange validé": "Echange",
-              "Demande de suppression": "Autre",
-              "Informations modifiées": "Autre",
-              "Prix modifié": "Autre",
-              "Changement de wilaya": "Autre",
-              "Surfacturation du colis": "Autre",
-              "En livraison": "En Livraison",
-              "Tentative de livraison": content === "Client contacté" ? "En Livraison" : 
-                                      (content === "Client ne répond pas" || content === "Client injoignable") ? "Tentative Echouée" : 
-                                      content === "aujourd'hui" ? "Programmé" : "Autre"
-            };
+          // Map API status to sheet status (Column O) with content-based logic for Tentative de livraison
+          const statusMapping = {
+            "Validé": "En dispatche",
+            "Uploadé sur le système": "En Preparation",
+            "Colis Ramassé": "En dispatche",
+            "Reception validé": "En Preparation",
+            "Enlevé par le livreur": "Au Bureau",
+            "Nouvelle tentative demandée par le vendeur": "Autre",
+            "Retour demandé par le partenaire": "Suspendu",
+            "Retour En transit": "Suspendu",
+            "Retour transmis au partenaire": "ANNULER",
+            "Pick-UP transmis au partenaire": "Pick-UP",
+            "Transmission du retour au partenaire annulée": "Autre",
+            "Retour reçu par le partenaire": "ANNULER",
+            "Retour validé par le partenaire": "ANNULER",
+            "Retour remis en livraison": "Autre",
+            "Retour transmis vers entrepôt": "Autre",
+            "Pick-Up collecté": "Pick-UP",
+            "Pick-Up validé": "Pick-UP",
+            "Pick-Up reçu par le partenaire": "Pick-UP",
+            "Suspendu": "Suspendu",
+            "Livré": "LIVRE",
+            "Montant transmis au partenaire": "LIVRE",
+            "Versement annulé": "Autre",
+            "Montant reçu par le partenaire": "LIVRE",
+            "Échange validé": "Echange",
+            "Demande de suppression": "Autre",
+            "Informations modifiées": "Autre",
+            "Prix modifié": "Autre",
+            "Changement de wilaya": "Autre",
+            "Surfacturation du colis": "Autre",
+            "En livraison": "En Livraison",
+            "Tentative de livraison": isStopDesk ? (
+              content === "Client contacté" ? "Contacté" :
+              content === "Client ne répond pas" ? "Sans Reponse" :
+              content.toLowerCase().includes("injoign") ? "Injoignable" :
+              content.includes("Reporté") ? "Reporté" :
+              content.includes("Changer le Prix") ? "Prix Modifié" :
+              content === "aujourd'hui" ? "Programmé" : "Autre"
+            ) : (
+              content.toLowerCase().includes("contacté") ? "Contacté By Livreur" :
+              content === "Client ne répond pas" ? "Sans Reponse" :
+              content.toLowerCase().includes("injoign") ? "Injoignable" :
+              content.includes("Reporté") ? "Reporté" :
+              content.includes("Changer le Prix") ? "Prix Modifié" :
+              content === "aujourd'hui" ? "Programmé" : "Autre"
+            )
+          };
 
-            const declencheurValue = statusMapping[latestEvent] || latestEvent;
-            feuilleZr.getRange(i + 1, 15).setValue(declencheurValue); // Column O
-            cellQ.setValue(latestEvent);
-            appendNumberedNote(cellQ, statusNote);
-            // Write A domicile or Stop desk to Column X
-            const deliveryType = resultatTrack[tracking].OrderInfo.stop_desk === 1 ? "Stop desk" : "A domicile";
-            feuilleZr.getRange(i + 1, 24).setValue(deliveryType); // Column X
-          } else {
-            const defaultError = `Erreur: Aucune activité pour tracking ${tracking}`;
-            const errorMessage = errorMessageOverrides["Erreur: Aucune activité pour tracking"] || defaultError;
-            cellQ.setValue(errorMessage);
-            appendNumberedNote(cellQ, errorMessage);
-            Logger.log(`${errorMessage}, ligne ${i + 1}`);
-            // Default to A domicile if no activity data
-            feuilleZr.getRange(i + 1, 24).setValue("A domicile"); // Column X
-          }
+          const declencheurValue = statusMapping[latestEvent] || latestEvent;
+          feuilleZr.getRange(i + 1, 15).setValue(declencheurValue); // Column O
+          cellQ.setValue(latestEvent);
+          appendNumberedNote(cellQ, statusNote);
+        } else {
+          const defaultError = `Erreur: Aucune activité pour tracking ${tracking}`;
+          const errorMessage = errorMessageOverrides["Erreur: Aucune activité pour tracking"] || defaultError;
+          cellQ.setValue(errorMessage);
+          appendNumberedNote(cellQ, errorMessage);
+          Logger.log(`${errorMessage}, ligne ${i + 1}`);
         }
-      } else {
-        // Handle API errors for all NS trackings
-        const errorMessage = `Erreur API trackings (statut ${statusCode}): ${responseText}`;
-        for (let i = 1; i < donneesZr.length; i++) {
-          const tracking = donneesZr[i][21]; // Column V
-          const societe = donneesZr[i][12]; // Column M
-          if (tracking && societe === "NS") {
-            const cellQ = feuilleZr.getRange(i + 1, 17);
-            cellQ.setValue(errorMessage);
-            appendNumberedNote(cellQ, errorMessage);
-            // Default to A domicile on API error
-            feuilleZr.getRange(i + 1, 24).setValue("A domicile"); // Column X
-          }
-        }
-        Logger.log(errorMessage);
-      }
-    } catch (e) {
-      // Handle general errors for all NS trackings
-      const errorMessage = `Erreur dans mettreAJourTousStatutsNoest: ${e.message}`;
+      } // End for loop
+    } else {
+      // Handle API errors for all NS trackings
+      const errorMessage = `Erreur API trackings (statut ${statusCode}): ${responseText}`;
       for (let i = 1; i < donneesZr.length; i++) {
         const tracking = donneesZr[i][21]; // Column V
         const societe = donneesZr[i][12]; // Column M
@@ -538,10 +533,22 @@
           const cellQ = feuilleZr.getRange(i + 1, 17);
           cellQ.setValue(errorMessage);
           appendNumberedNote(cellQ, errorMessage);
-          // Default to A domicile on general error
-          feuilleZr.getRange(i + 1, 24).setValue("A domicile"); // Column X
         }
       }
       Logger.log(errorMessage);
+    } // End if (statusCode)
+  } catch (e) {
+    // Handle general errors for all NS trackings
+    const errorMessage = `Erreur dans mettreAJourTousStatutsNoest: ${e.message}`;
+    for (let i = 1; i < donneesZr.length; i++) {
+      const tracking = donneesZr[i][21]; // Column V
+      const societe = donneesZr[i][12]; // Column M
+      if (tracking && societe === "NS") {
+        const cellQ = feuilleZr.getRange(i + 1, 17);
+        cellQ.setValue(errorMessage);
+        appendNumberedNote(cellQ, errorMessage);
+      }
     }
-  }
+    Logger.log(errorMessage);
+  } // End try
+}
